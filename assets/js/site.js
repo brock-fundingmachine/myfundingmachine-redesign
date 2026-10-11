@@ -20,6 +20,21 @@
   }
   if (countdown) { tick(); setInterval(tick, 30000); }
 
+  // Live events page: the full countdown, seconds included.
+  const big = document.getElementById("event-countdown");
+  if (big) {
+    const cells = ["d", "h", "m", "s"].map((k) => big.querySelector(`[data-ec="${k}"]`));
+    const bigTick = () => {
+      const ms = Math.max(0, eventStart - Date.now());
+      const parts = [Math.floor(ms / 86400000), Math.floor(ms / 3600000) % 24, Math.floor(ms / 60000) % 60, Math.floor(ms / 1000) % 60];
+      parts.forEach((n, i) => { cells[i].textContent = i === 0 ? n : String(n).padStart(2, "0"); });
+      return ms > 0;
+    };
+    if (bigTick()) {
+      const timer = setInterval(() => { if (!bigTick()) clearInterval(timer); }, 1000);
+    }
+  }
+
   // Header gains a hairline once the page scrolls.
   const head = document.getElementById("site-head");
   if (head) {
@@ -90,6 +105,88 @@
       stage.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
     });
   });
+
+  // Event schedule: without JS both days show stacked; with it, Day 1 / Day 2 tabs.
+  const schedule = document.getElementById("schedule");
+  if (schedule) {
+    const tabs = [...schedule.querySelectorAll('[role="tab"]')];
+    const select = (tab, focus) => {
+      tabs.forEach((t) => {
+        const on = t === tab;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      });
+      if (focus) tab.focus();
+    };
+    tabs.forEach((t, i) => {
+      const panel = document.getElementById(t.getAttribute("aria-controls"));
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", t.id);
+      panel.tabIndex = 0;
+      t.addEventListener("click", () => select(t));
+      t.addEventListener("keydown", (e) => {
+        const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+        if (next === undefined) return;
+        e.preventDefault();
+        select(tabs[(next + tabs.length) % tabs.length], true);
+      });
+    });
+    schedule.querySelector(".schedule__tabs").hidden = false;
+    select(tabs[0]);
+  }
+
+  // Speaker bios: long ones clamp to four lines with a toggle.
+  document.querySelectorAll(".speaker__bio").forEach((bio) => {
+    const more = bio.nextElementSibling;
+    if (!more || bio.scrollHeight <= bio.clientHeight + 2) { bio.classList.remove("is-clamped"); return; }
+    more.hidden = false;
+    more.addEventListener("click", () => {
+      const open = more.getAttribute("aria-expanded") !== "true";
+      bio.classList.toggle("is-clamped", !open);
+      more.setAttribute("aria-expanded", String(open));
+      more.textContent = open ? "Show less" : "Read full bio";
+    });
+  });
+
+  // Masterclass registration: same tracking event the live page sends, then on to the video.
+  const mc = document.getElementById("masterclass-form");
+  if (mc) {
+    const status = mc.querySelector(".form-card__status");
+    const submit = mc.querySelector('button[type="submit"]');
+    mc.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!mc.reportValidity()) return;
+      const data = Object.fromEntries(new FormData(mc));
+      submit.disabled = true;
+      submit.textContent = "Registering...";
+      status.textContent = "";
+      try {
+        await fetch("https://backend.leadconnectorhq.com/external-tracking/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", version: "2021-07-28" },
+          body: JSON.stringify({
+            type: "external_form_submission",
+            timestamp: Date.now(),
+            formId: "Masterclass Registration Form",
+            formData: { first_name: data.first_name, email: data.email, phone: data.phone },
+            formLabels: { first_name: "First Name", email: "Email", phone: "Phone Number" },
+            url: location.href, title: document.title, path: location.pathname, userAgent: navigator.userAgent,
+            trackingId: "tk_594a6319ef494fe08f0114cc2830d8b8",
+            locationId: "HUjFTz0AbjoNOcWuS1h7",
+            sessionId: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            properties: { deviceType: /Mobi/i.test(navigator.userAgent) ? "mobile" : "desktop" }
+          })
+        });
+        status.textContent = "Success! You\u2019ve been registered for the masterclass.";
+        setTimeout(() => { location.href = mc.dataset.redirect; }, 1000);
+      } catch {
+        status.textContent = "Something went wrong. Please try again.";
+        submit.disabled = false;
+        submit.textContent = "Access Masterclass";
+      }
+    });
+  }
 
   // Revenue calculator.
   const money = (n) => "$" + Math.round(n).toLocaleString("en-US");
