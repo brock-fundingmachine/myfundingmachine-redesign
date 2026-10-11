@@ -16,7 +16,9 @@ A static redesign of the [myfundingmachine.com](https://myfundingmachine.com) ho
 
 ## Preview
 
-Open `index.html` in a browser, or serve the folder:
+Live: https://brock-fundingmachine.github.io/myfundingmachine-redesign/
+
+Or open `index.html` in a browser, or serve the folder:
 
 ```sh
 python3 -m http.server 8000
